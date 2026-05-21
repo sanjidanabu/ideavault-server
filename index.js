@@ -1,13 +1,13 @@
 const express = require('express')
-const dontenv = require('dotenv')
+const dotenv = require('dotenv') 
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-dontenv.config()
+dotenv.config() 
 
 const uri = process.env.MONGODB_URI;
 const app = express()
 
-const PORT = process.env.PORT
+const PORT = process.env.PORT || 5000; 
 app.use(cors())
 app.use(express.json())
 
@@ -28,10 +28,25 @@ async function run() {
    const ideaCollection = db.collection("ideas")
    
    
+   
    app.get('/ideas', async(req, res) =>{
-    const result = await ideaCollection.find().toArray()
+    const { search, category } = req.query;
+    let query = {};
+
+   
+    if (search) {
+      query.title = { $regex: search, $options: 'i' };
+    }
+
+    
+    if (category) {
+      query.category = category;
+    }
+
+    const result = await ideaCollection.find(query).toArray()
     res.json(result);
    })
+   
 
    
    app.post('/ideas', async (req, res) =>{
@@ -47,6 +62,51 @@ async function run() {
     const result = await ideaCollection.findOne({_id: new ObjectId(id)})
     res.json(result)
    })
+
+
+   
+   app.get('/my-ideas', async (req, res) => {
+     const email = req.query.email;
+     const result = await ideaCollection.find({ userEmail: email }).toArray();
+     res.json(result);
+   });
+
+  
+   app.get('/my-interactions', async (req, res) => {
+     const email = req.query.email;
+     
+     if (!email) {
+       return res.status(400).json({ error: "Email is required" });
+     }
+
+     try {
+       
+       const result = await ideaCollection.find({
+         comments: { $elemMatch: { userEmail: email } }
+       }).toArray();
+       
+       res.json(result);
+     } catch (error) {
+       console.error("Error fetching interactions:", error);
+       res.status(500).json({ error: "Failed to fetch interactions" });
+     }
+   });
+
+   app.patch('/ideas/:id', async (req, res) => {
+     const { id } = req.params;
+     const result = await ideaCollection.updateOne(
+       { _id: new ObjectId(id) }, 
+       { $set: { title: req.body.title, description: req.body.description } }
+     );
+     res.json(result);
+   });
+
+   app.delete('/ideas/:id', async (req, res) => {
+     const { id } = req.params;
+     const result = await ideaCollection.deleteOne({ _id: new ObjectId(id) });
+     res.json(result);
+   });
+  
 
    
    app.post('/ideas/:id/comments', async (req, res) => {
